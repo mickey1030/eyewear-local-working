@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <!-- Default/fallback tags below are only used when a page doesn't supply its own
+         via SeoHead (see src/lib/seo-head.tsx, src/entry-server.tsx, scripts/prerender.mjs).
+         Prerendered routes have this whole block replaced with page-specific
+         title/description/canonical/hreflang/structured-data at build time. -->
+    <!--default-head-start-->
+    <title>Ashraf Monir</title>
+    <meta name="description" content="Ashraf Monir — premium eyewear: sunglasses, optical frames, clip-ons and kids' glasses." />
+    <meta property="og:title" content="Ashraf Monir" />
+    <meta property="og:description" content="Ashraf Monir — premium eyewear: sunglasses, optical frames, clip-ons and kids' glasses." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Ashraf Monir" />
+    <meta name="twitter:description" content="Ashraf Monir — premium eyewear: sunglasses, optical frames, clip-ons and kids' glasses." />
+    <!--default-head-end-->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!--ssr-head-->
+  </head>
+  <body>
+    <div id="root"><!--ssr-html--></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

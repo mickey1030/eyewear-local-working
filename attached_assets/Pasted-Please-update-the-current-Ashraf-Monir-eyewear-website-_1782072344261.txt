@@ -1,0 +1,45 @@
+Please update the current "Ashraf Monir" eyewear website with the following modifications, logic updates, and new features:
+
+1. Bilingual Support (English & Arabic)
+
+Add a professional language toggle switch in the navbar.
+
+Ensure the entire interface smoothly switches between English and Arabic (categories, form labels, notes, cart, etc.).
+
+Automatically apply RTL (Right-to-Left) layout and formatting when Arabic is selected.
+
+2. Checkout Form & Pricing Fixes
+
+Completely remove the "Agreed Price" input field from the order form so the customer cannot type or edit the price.
+
+Bind the final price automatically to the selected item.
+
+Implement a Shipping/Delivery Fee logic: Add a fixed delivery fee of 75 EGP to the checkout summary.
+
+Implement a Free Shipping condition: If the total order price is 2000 EGP or greater, automatically set the delivery fee to 0 EGP and display a "Free Shipping" badge or text.
+
+3. Dynamic Form Logic Reminder
+
+For the "Sun" category orders: Show only the standard contact fields (Full Name, Email, Phone Number, Delivery Address).
+
+For the "Medical" category orders: Show contact fields AND dynamically reveal a "Prescription Details" section.
+
+In the Medical section, add an image/file upload button for the prescription ("Upload Prescription" / "إرفاق الكشف").
+
+In the Medical section, add lens type selection buttons/dropdowns: "Blue cut", "Anti-reflection", "White", "Blue cut grey", "Grey", and "Brown".
+
+Display a clear note specifically beneath the "Blue cut grey", "Grey", and "Brown" options.
+
+The note in English should be: "(This lens darkens in the sun.)"
+
+The note in Arabic should be: "(هذه العدسة يتغير لونها وتصبح غامقة في الشمس.)"
+
+4. Footer Update (Social Media & Contact)
+
+Design a clean, modern, and professional footer section at the bottom of the website.
+
+Add a clear phone number display for customer service.
+
+Include high-quality, professional social media icons side-by-side for Facebook, Instagram, and TikTok.
+
+Ensure these icons look premium and act as clickable placeholders where social media links can be easily attached later.
