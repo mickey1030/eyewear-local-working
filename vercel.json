@@ -1,5 +1,9 @@
 {
+  "version": 2,
   "rewrites": [
-    { "source": "/(.*)", "destination": "/" }
+    { "source": "/api/:path*", "destination": "https://eyewear-local-working.onrender.com/api/:path*" },
+    { "source": "/sitemap.xml", "destination": "https://eyewear-local-working.onrender.com/sitemap.xml" },
+    { "source": "/robots.txt", "destination": "https://eyewear-local-working.onrender.com/robots.txt" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
