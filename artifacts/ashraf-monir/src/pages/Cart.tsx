@@ -5,9 +5,8 @@ import { Button } from "@/components/ui/button";
 import { useCart } from "@/contexts/CartContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { cn } from "@/lib/utils";
+import { DELIVERY_FEE, FREE_SHIPPING_THRESHOLD } from "@/data/products";
 
-const DELIVERY_FEE = 75;
-const FREE_SHIPPING_THRESHOLD = 2000;
 
 const LENS_IDS = ["blue_cut", "anti_reflection", "white", "blue_cut_grey", "grey", "brown", "blue_cut_brown"] as const;
 

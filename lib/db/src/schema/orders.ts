@@ -1,4 +1,4 @@
-import { pgTable, serial, text, numeric, integer, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, numeric, integer, timestamp, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -19,7 +19,9 @@ export const ordersTable = pgTable("orders", {
   lensType:        text("lens_type"),
   notes:           text("notes"),
   createdAt:       timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (t) => [
+  uniqueIndex("orders_order_number_key").on(t.orderNumber),
+]);
 
 export const orderItemsTable = pgTable("order_items", {
   id:              serial("id").primaryKey(),
@@ -30,7 +32,9 @@ export const orderItemsTable = pgTable("order_items", {
   productImageUrl: text("product_image_url"),
   quantity:        integer("quantity").notNull().default(1),
   price:           numeric("price", { precision: 10, scale: 2 }).notNull(),
-});
+}, (t) => [
+  index("order_items_order_id_idx").on(t.orderId),
+]);
 
 export const insertOrderSchema = createInsertSchema(ordersTable).omit({ id: true, createdAt: true });
 export const insertOrderItemSchema = createInsertSchema(orderItemsTable).omit({ id: true });

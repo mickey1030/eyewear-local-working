@@ -17,6 +17,10 @@ router.get("/products", async (req, res, next) => {
   }
 });
 
+function badPrice(price: unknown): boolean {
+  return price !== undefined && !(Number.isFinite(Number(price)) && Number(price) >= 0 && Number(price) < 1e8);
+}
+
 router.post("/products", requireAdmin, async (req, res, next) => {
   try {
     const parsed = insertProductSchema.safeParse(req.body);
@@ -24,6 +28,7 @@ router.post("/products", requireAdmin, async (req, res, next) => {
       res.status(400).json({ error: parsed.error.flatten() });
       return;
     }
+    if (badPrice(parsed.data.price)) { res.status(400).json({ error: "Invalid price" }); return; }
     const [product] = await db.insert(productsTable).values(parsed.data).returning();
     res.status(201).json(product);
   } catch (err) {
@@ -38,6 +43,7 @@ router.put("/products/:id", requireAdmin, async (req, res, next) => {
     // Use partial schema so callers can update any subset of fields without wiping the rest
     const parsed = insertProductSchema.partial().safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
+    if (badPrice(parsed.data.price)) { res.status(400).json({ error: "Invalid price" }); return; }
     // Strip undefined so Drizzle doesn't attempt to set columns we didn't receive
     const data = Object.fromEntries(Object.entries(parsed.data).filter(([, v]) => v !== undefined));
     if (Object.keys(data).length === 0) { res.status(400).json({ error: "No fields to update" }); return; }

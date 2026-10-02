@@ -1,7 +1,10 @@
 import { Router } from "express";
+import crypto from "node:crypto";
 import { db } from "@workspace/db";
-import { ordersTable, orderItemsTable } from "@workspace/db";
-import { eq, desc, inArray, sql } from "drizzle-orm";
+import { ordersTable, orderItemsTable, productsTable } from "@workspace/db";
+import { computeTotals } from "@workspace/catalog";
+import { eq, desc, inArray, or, sql } from "drizzle-orm";
+import { rateLimit } from "../lib/rateLimit";
 import { requireAdmin } from "../middleware/requireAdmin";
 
 const router = Router();
@@ -10,69 +13,138 @@ const VALID_STATUSES = ["pending", "confirmed", "processing", "shipped", "delive
 type ValidStatus = typeof VALID_STATUSES[number];
 
 // ─── Public: create order (called from checkout) ──────────────────────────────
-router.post("/orders", async (req, res, next) => {
-  try {
-    const b = req.body as {
-      orderNumber: string;
-      customerName: string;
-      phone: string;
-      email?: string;
-      address: string;
-      subtotal: number;
-      discount: number;
-      deliveryFee: number;
-      total: number;
-      promoCode?: string;
-      lensChoice?: string;
-      lensType?: string;
-      items: Array<{ name: string; nameAr?: string; quantity: number; price: number; productCode?: number; productImageUrl?: string }>;
-    };
+// SECURITY: prices, discount, delivery and total are NEVER taken from the client. The server
+// looks each product up in the database and recomputes everything with the shared pricing rules.
+const orderLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 20, message: "Too many orders from this connection. Please try again later." });
 
-    if (!b.orderNumber || !b.customerName || !b.phone || !b.address) {
+const MAX_LINES = 50;
+const MAX_QTY = 50;
+
+function str(value: unknown, max: number): string {
+  return typeof value === "string" ? value.trim().slice(0, max) : "";
+}
+
+function newOrderNumber(): string {
+  // 8 chars from an unambiguous alphabet (no 0/O/1/I) -> ~1 trillion combinations
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = crypto.randomBytes(8);
+  return "AM-" + Array.from(bytes, (b) => alphabet[b % alphabet.length]).join("");
+}
+
+router.post("/orders", orderLimiter, async (req, res, next) => {
+  try {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+
+    const customerName = str(b.customerName, 120);
+    const phone = str(b.phone, 40);
+    const address = str(b.address, 500);
+    const email = str(b.email, 200) || null;
+    if (!customerName || !phone || !address) {
       res.status(400).json({ error: "Missing required order fields" });
       return;
     }
 
-    const nums = [b.subtotal, b.discount, b.deliveryFee, b.total].filter((n) => n !== undefined);
-    const itemsValid =
-      b.items === undefined ||
-      (Array.isArray(b.items) &&
-        b.items.every((i) => i && typeof i.name === "string" && Number.isFinite(Number(i.price)) && Number.isInteger(Number(i.quantity)) && Number(i.quantity) > 0));
-    if (!nums.every((n) => Number.isFinite(Number(n))) || !itemsValid) {
-      res.status(400).json({ error: "Invalid amounts or items" });
+    const rawItems = Array.isArray(b.items) ? (b.items as Record<string, unknown>[]) : [];
+    if (rawItems.length === 0 || rawItems.length > MAX_LINES) {
+      res.status(400).json({ error: "Order must contain between 1 and 50 items" });
       return;
     }
 
-    const [order] = await db.insert(ordersTable).values({
-      orderNumber:     b.orderNumber,
-      customerName:    b.customerName,
-      customerPhone:   b.phone,
-      customerEmail:   b.email ?? null,
-      customerAddress: b.address,
-      subtotal:        String(b.subtotal ?? 0),
-      discount:        String(b.discount ?? 0),
-      delivery:        String(b.deliveryFee ?? 75),
-      total:           String(b.total ?? 0),
-      promoCode:       b.promoCode ?? null,
-      lensChoice:      b.lensChoice ?? null,
-      lensType:        b.lensType ?? null,
-    }).returning();
-
-    if (b.items?.length) {
-      await db.insert(orderItemsTable).values(
-        b.items.map((item) => ({
-          orderId:         order.id,
-          productName:     item.name,
-          productNameAr:   item.nameAr ?? null,
-          productCode:     item.productCode ?? null,
-          productImageUrl: item.productImageUrl ?? null,
-          quantity:        item.quantity,
-          price:           String(item.price),
-        }))
-      );
+    // Resolve every line to a real product (by id, or by code as a fallback)
+    const ids: number[] = [];
+    const codes: number[] = [];
+    const lines = rawItems.map((raw) => {
+      const quantity = Number(raw?.quantity);
+      const productId = Number(raw?.productId);
+      const productCode = Number(raw?.productCode);
+      if (!Number.isInteger(quantity) || quantity < 1 || quantity > MAX_QTY) return null;
+      if (Number.isInteger(productId) && productId > 0) ids.push(productId);
+      else if (Number.isInteger(productCode) && productCode > 0) codes.push(productCode);
+      else return null;
+      return {
+        quantity,
+        productId: Number.isInteger(productId) && productId > 0 ? productId : null,
+        productCode: Number.isInteger(productCode) && productCode > 0 ? productCode : null,
+        nameAr: str(raw?.nameAr, 200) || null,
+      };
+    });
+    if (lines.some((l) => l === null)) {
+      res.status(400).json({ error: "Invalid items in order" });
+      return;
     }
 
-    res.status(201).json({ id: order.id, orderNumber: order.orderNumber });
+    const conditions = [];
+    if (ids.length) conditions.push(inArray(productsTable.id, ids));
+    if (codes.length) conditions.push(inArray(productsTable.code, codes));
+    const products = await db.select().from(productsTable).where(or(...conditions));
+    const byId = new Map(products.map((p) => [p.id, p]));
+    const byCode = new Map(products.filter((p) => p.code != null).map((p) => [p.code as number, p]));
+
+    const resolved: Array<{ product: (typeof products)[number]; quantity: number; nameAr: string | null }> = [];
+    for (const l of lines as NonNullable<(typeof lines)[number]>[]) {
+      const product = (l.productId && byId.get(l.productId)) || (l.productCode && byCode.get(l.productCode)) || null;
+      if (!product) {
+        res.status(400).json({ error: "One of the products in your cart is no longer available. Please refresh your cart." });
+        return;
+      }
+      resolved.push({ product, quantity: l.quantity, nameAr: l.nameAr });
+    }
+
+    const subtotal = resolved.reduce((sum, r) => sum + Number(r.product.price) * r.quantity, 0);
+    const totals = computeTotals(subtotal, str(b.promoCode, 40));
+
+    // Insert order + items atomically; retry if the (random) order number ever collides.
+    let created: { id: number; orderNumber: string } | null = null;
+    for (let attempt = 0; attempt < 5 && !created; attempt++) {
+      const orderNumber = newOrderNumber();
+      try {
+        created = await db.transaction(async (tx) => {
+          const [order] = await tx.insert(ordersTable).values({
+            orderNumber,
+            customerName,
+            customerPhone: phone,
+            customerEmail: email,
+            customerAddress: address,
+            subtotal: totals.subtotal.toFixed(2),
+            discount: totals.discount.toFixed(2),
+            delivery: totals.deliveryFee.toFixed(2),
+            total: totals.total.toFixed(2),
+            promoCode: totals.promoCode,
+            lensChoice: str(b.lensChoice, 40) || null,
+            lensType: str(b.lensType, 80) || null,
+          }).returning();
+
+          await tx.insert(orderItemsTable).values(
+            resolved.map((r) => ({
+              orderId: order.id,
+              productName: r.product.name,
+              productNameAr: r.nameAr,
+              productCode: r.product.code,
+              productImageUrl: r.product.imageUrl ?? r.product.imageUrls?.[0] ?? null,
+              quantity: r.quantity,
+              price: Number(r.product.price).toFixed(2),
+            })),
+          );
+          return { id: order.id, orderNumber: order.orderNumber };
+        });
+      } catch (err) {
+        const code = (err as { code?: string; cause?: { code?: string } })?.code ?? (err as { cause?: { code?: string } })?.cause?.code;
+        if (code !== "23505") throw err; // only retry on unique-violation
+      }
+    }
+    if (!created) {
+      res.status(503).json({ error: "Could not allocate an order number, please try again" });
+      return;
+    }
+
+    res.status(201).json({
+      ...created,
+      subtotal: totals.subtotal,
+      discount: totals.discount,
+      deliveryFee: totals.deliveryFee,
+      total: totals.total,
+      promoCode: totals.promoCode,
+    });
   } catch (err) {
     next(err);
   }

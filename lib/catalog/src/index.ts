@@ -17,3 +17,4 @@ export const BRAND_TO_CATEGORY: Record<string, ProductCategory> = {
   Children: "children",
   "Clip-On": "clip-on",
 };
+export * from "./pricing";

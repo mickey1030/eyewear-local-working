@@ -5,8 +5,12 @@ import { ALL_PRODUCTS, CATEGORY_SUBCATEGORIES, BRAND_TO_CATEGORY } from "@worksp
 const seoRouter: Router = Router();
 
 function getBaseUrl(req: Request): string {
+  // Prefer an explicit public origin (set SITE_ORIGIN in .env) so the Host header can't poison the sitemap.
+  const configured = process.env.SITE_ORIGIN?.trim().replace(/\/$/, "");
+  if (configured) return configured;
   const host = req.get("host") ?? "localhost";
-  const protocol = host.startsWith("localhost") ? req.protocol : "https";
+  const isLocal = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(host);
+  const protocol = isLocal ? req.protocol : "https";
   return `${protocol}://${host}`;
 }
 

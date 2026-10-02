@@ -32,3 +32,5 @@ Product images: copy your old `artifacts/api-server/uploads/` folder into the sa
 * **Database connection FAILED** - Neon string must end in `?sslmode=require`; URL-encode odd password characters.
 * **Port already in use** - change `PORT` (API) or `WEB_PORT` (Vite) in `.env`.
 * **esbuild "Host version ... does not match binary version"** - delete `node_modules` and run `pnpm install` again (the workspace pins a single esbuild).
+* **Migration 0001 fails on `orders_order_number_key`** - your database already has two orders with the same `order_number`. Rename the duplicates in Neon's SQL editor, then run `pnpm db:migrate` again.
+* **Too many login attempts (429)** - wait 15 minutes or restart `pnpm dev`.

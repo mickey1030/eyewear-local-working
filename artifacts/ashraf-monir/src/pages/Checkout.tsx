@@ -12,19 +12,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Truck, Sun, Tag, Check, ShoppingBag, Loader2, UserCheck } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useCart } from "@/contexts/CartContext";
+import { PROMO_CODES, computeTotals } from "@/data/products";
+import { toast } from "@/hooks/use-toast";
 
-const DELIVERY_FEE = 75;
-const FREE_SHIPPING_THRESHOLD = 2000;
-
-const PROMO_CODES: Record<string, { type: "percent" | "fixed"; value: number }> = {
-  "SAVE10":  { type: "percent", value: 10 },
-  "MONIR20": { type: "percent", value: 20 },
-  "WELCOME": { type: "fixed",   value: 100 },
-};
-
-function generateOrderNumber() {
-  return "AM-" + Date.now().toString(36).toUpperCase().slice(-6);
-}
+// Pricing rules are shared with the API (lib/catalog/src/pricing.ts). The server recomputes
+// every total itself, so what is shown here always matches what is stored.
 
 // ─── Saved customer info (localStorage) ───────────────────────────────────────
 const CUSTOMER_STORAGE_KEY = "am_customer_info";
@@ -74,16 +66,6 @@ export default function Checkout() {
   const [savedCustomer, setSavedCustomer] = useState<SavedCustomer | null>(null);
   const [autofilled, setAutofilled]       = useState(false);
 
-  if (items.length === 0) {
-    return (
-      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-6 p-8 animate-in fade-in duration-500">
-        <ShoppingBag className="h-16 w-16 text-muted-foreground/40" />
-        <h2 className="text-2xl font-serif">{t("checkout.emptyCart")}</h2>
-        <Button asChild size="lg"><Link href="/cart">{t("checkout.goToCart")}</Link></Button>
-      </div>
-    );
-  }
-
   const applyPromo = () => {
     const code = promoInput.trim().toUpperCase();
     const promo = PROMO_CODES[code];
@@ -96,14 +78,7 @@ export default function Checkout() {
     }
   };
 
-  const discount          = appliedPromo
-    ? appliedPromo.type === "percent"
-      ? Math.round(subtotal * appliedPromo.value / 100)
-      : Math.min(appliedPromo.value, subtotal)
-    : 0;
-  const discountedSubtotal = subtotal - discount;
-  const deliveryFee        = discountedSubtotal >= FREE_SHIPPING_THRESHOLD ? 0 : DELIVERY_FEE;
-  const total              = discountedSubtotal + deliveryFee;
+  const { discount, deliveryFee, total } = computeTotals(subtotal, appliedPromo?.code);
 
   // ── Load saved customer on mount ──
   const saved = loadSavedCustomer();
@@ -127,6 +102,16 @@ export default function Checkout() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  if (items.length === 0) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-6 p-8 animate-in fade-in duration-500">
+        <ShoppingBag className="h-16 w-16 text-muted-foreground/40" />
+        <h2 className="text-2xl font-serif">{t("checkout.emptyCart")}</h2>
+        <Button asChild size="lg"><Link href="/cart">{t("checkout.goToCart")}</Link></Button>
+      </div>
+    );
+  }
+
   async function onSubmit(values: FormValues) {
     const rxFilename = sessionStorage.getItem("am_rx_filename") ?? "";
 
@@ -139,12 +124,12 @@ export default function Checkout() {
     });
 
     const orderData = {
-      orderNumber:  generateOrderNumber(),
       customerName: values.customerName,
       phone:        values.phone,
       email:        values.email,
       address:      values.address,
       items: items.map((i) => ({
+        productId:       Number(String(i.product.id).replace(/^db-/, "")) || undefined,
         name:            i.product.name,
         nameAr:          i.product.nameAr,
         quantity:        i.quantity,
@@ -152,26 +137,48 @@ export default function Checkout() {
         productCode:     i.product.code,
         productImageUrl: i.product.image,
       })),
-      subtotal,
-      deliveryFee,
-      discount,
-      total,
       promoCode:    appliedPromo?.code,
       lensChoice,
       lensType:     selectedLensType,
       rxFilename,
     };
 
-    // Persist order to DB — checkout completes even if API is unavailable
+    // The order MUST reach the server before we tell the customer it succeeded.
+    let saved: { orderNumber: string; subtotal: number; discount: number; deliveryFee: number; total: number } | null = null;
+    let failMessage = "";
     try {
-      await fetch("/api/orders", {
+      const res = await fetch("/api/orders", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify(orderData),
       });
-    } catch { /* silent — sessionStorage fallback below still works */ }
+      if (res.ok) {
+        saved = await res.json();
+      } else {
+        try { failMessage = (await res.json())?.error ?? ""; } catch { /* ignore */ }
+        if (!failMessage) failMessage = `HTTP ${res.status}`;
+      }
+    } catch {
+      failMessage = lang === "ar" ? "تعذّر الاتصال بالخادم" : "Could not reach the server";
+    }
 
-    sessionStorage.setItem("am_last_order", JSON.stringify(orderData));
+    if (!saved) {
+      toast({
+        variant: "destructive",
+        title: lang === "ar" ? "لم يتم إرسال الطلب" : "Your order was not placed",
+        description: (lang === "ar" ? "حاول مرة أخرى. سلتك لم تتغير. " : "Please try again - your cart is unchanged. ") + failMessage,
+      });
+      return;
+    }
+
+    sessionStorage.setItem("am_last_order", JSON.stringify({
+      ...orderData,
+      orderNumber: saved.orderNumber,
+      subtotal:    saved.subtotal,
+      discount:    saved.discount,
+      deliveryFee: saved.deliveryFee,
+      total:       saved.total,
+    }));
     clearCart();
     setLocation("/order-confirmation");
   }

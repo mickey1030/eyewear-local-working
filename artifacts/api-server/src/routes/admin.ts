@@ -2,6 +2,7 @@ import { Router } from "express";
 import crypto from "node:crypto";
 import { env } from "../env";
 import { requireAdmin } from "../middleware/requireAdmin";
+import { rateLimit } from "../lib/rateLimit";
 
 const router = Router();
 
@@ -19,7 +20,10 @@ const cookieOptions = {
   secure: env.cookieSecure,
 };
 
-router.post("/api/admin/login", (req, res) => {
+// 10 attempts / 15 min per IP: stops password guessing
+const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, message: "Too many login attempts. Try again in a few minutes." });
+
+router.post("/api/admin/login", loginLimiter, (req, res) => {
   const { password } = (req.body ?? {}) as { password?: unknown };
   if (typeof password !== "string" || !password || !passwordMatches(password)) {
     res.status(401).json({ error: "Invalid password" });
