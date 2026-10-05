@@ -1,9 +1,25 @@
 {
   "version": 2,
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://eyewear-local-working.onrender.com/api/:path*" },
-    { "source": "/sitemap.xml", "destination": "https://eyewear-local-working.onrender.com/sitemap.xml" },
-    { "source": "/robots.txt", "destination": "https://eyewear-local-working.onrender.com/robots.txt" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/api/uploads/:path*",
+      "destination": "https://pub-0363bd94f6254ce69b5243a34d476628.r2.dev/:path*"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "https://eyewear-local-working.onrender.com/api/:path*"
+    },
+    {
+      "source": "/sitemap.xml",
+      "destination": "https://eyewear-local-working.onrender.com/sitemap.xml"
+    },
+    {
+      "source": "/robots.txt",
+      "destination": "https://eyewear-local-working.onrender.com/robots.txt"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ]
 }
