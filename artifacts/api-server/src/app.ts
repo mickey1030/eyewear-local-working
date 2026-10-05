@@ -15,7 +15,7 @@ import seoRouter from "./routes/seo";
 import ordersRouter from "./routes/orders";
 import exportRouter from "./routes/export";
 import { logger } from "./lib/logger";
-import { uploadPath } from "./lib/storage";
+import { uploadPath, r2PublicFileUrl } from "./lib/storage";
 
 const app: Express = express();
 if (env.trustProxy) app.set("trust proxy", true);
@@ -53,6 +53,12 @@ app.get("/api/uploads/:filename", (req: Request, res: Response) => {
   const full = uploadPath(String(req.params.filename));
   if (!full) {
     res.status(400).json({ error: "Invalid file name" });
+    return;
+  }
+  // R2 mode: images live in the bucket, so send the browser there.
+  const r2Url = r2PublicFileUrl(String(req.params.filename));
+  if (r2Url) {
+    res.redirect(302, r2Url);
     return;
   }
   res.setHeader("Cache-Control", "public, max-age=31536000, immutable");

@@ -87,5 +87,14 @@ export const env = {
   trustProxy: process.env.TRUST_PROXY === "true",
   cookieSecure: process.env.COOKIE_SECURE === "true",
   uploadsDir: path.resolve(API_DIR, process.env.UPLOADS_DIR?.trim() || "uploads"),
+  // Cloudflare R2 (optional). When all four of the first values are set, uploads go to R2
+  // instead of the local disk. r2PublicUrl is where those files are publicly served from.
+  r2: {
+    accountId: process.env.R2_ACCOUNT_ID?.trim() ?? "",
+    accessKeyId: process.env.R2_ACCESS_KEY_ID?.trim() ?? "",
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY?.trim() ?? "",
+    bucket: process.env.R2_BUCKET?.trim() ?? "",
+    publicUrl: (process.env.R2_PUBLIC_URL?.trim() ?? "").replace(/\/+$/, ""),
+  },
   envFiles: loaded,
 };
